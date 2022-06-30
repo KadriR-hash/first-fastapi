@@ -1,5 +1,7 @@
 from enum import Enum
-from fastapi import FastAPI, Query, Path, Body
+from fastapi import FastAPI, Query, Path, Body, Cookie, Header
+# Cookie & Header is a "sister" class of Path and Query. It also inherits from the same common Param class.
+
 # FastAPI is a Python class that provides all the functionality for your API.
 from pydantic import BaseModel, Field, HttpUrl  # pydantic -> flexibility
 from datetime import datetime, time, timedelta
@@ -69,11 +71,15 @@ class Offer(BaseModel):
 
 # PATH params
 @app.get("/items/{item_id}")
-async def read_item(item_id: int, q: str | None = None, short: bool = False):  # we can declare intem_id type.
+async def read_item(item_id: int,
+                    q: str | None = None,
+                    short: bool = False,
+                    ads_id: str | None = Cookie(default=None),
+                    user_agent: str | None = Header(default=None)):  # we can declare item_id type.
     # So, with that type declaration, FastAPI gives you automatic request "parsing" + "data validation".
     # All the data validation is performed under the hood by Pydantic.
 
-    item = {"item_id": item_id}
+    item = {"item_id": item_id, "ads_id": ads_id, "user_agent": user_agent}
     if q:
         item.update({"q": q})  # q is an optional query  param
     if not short:
