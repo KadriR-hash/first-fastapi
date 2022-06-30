@@ -1,7 +1,7 @@
 from enum import Enum
 from fastapi import FastAPI, Query, Path, Body
 # FastAPI is a Python class that provides all the functionality for your API.
-from pydantic import BaseModel , Field # declare validation and metadata inside of Pydantic models using Pydantic's
+from pydantic import BaseModel, Field  # declare validation and metadata inside of Pydantic models using Pydantic's
 
 app = FastAPI()  # This will be the main point of interaction to create all your API.
 
@@ -13,6 +13,11 @@ class ModelName(str, Enum):
     lenet = "lenet"
 
 
+class Image(BaseModel):
+    url: str
+    name: str
+
+
 # declare the  data model as a class that inherits from BaseModel
 class Item(BaseModel):
     name: str
@@ -22,6 +27,8 @@ class Item(BaseModel):
     price: float = Field(gt=0,
                          description="The price must be greater than zero")
     tax: float | None = None
+    tags: list[str] = []
+    image: Image | None = None
 
 
 class User(BaseModel):
