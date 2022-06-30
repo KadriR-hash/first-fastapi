@@ -1,7 +1,13 @@
 from enum import Enum
-from fastapi import FastAPI, Query, Path, Body
+from fastapi import FastAPI, Query, Path, Body, Cookie, Header
+# Cookie & Header is a "sister" class of Path and Query. It also inherits from the same common Param class.
+
 # FastAPI is a Python class that provides all the functionality for your API.
-from pydantic import BaseModel, Field  # declare validation and metadata inside of Pydantic models using Pydantic's
+from pydantic import BaseModel, Field, HttpUrl  # pydantic -> flexibility
+from datetime import datetime, time, timedelta
+from uuid import UUID
+
+# declare validation and metadata inside of Pydantic models using Pydantic's
 
 app = FastAPI()  # This will be the main point of interaction to create all your API.
 
@@ -13,27 +19,50 @@ class ModelName(str, Enum):
     lenet = "lenet"
 
 
+# You can declare an example for a Pydantic model using Config and schema_extra
+# You could use the same technique to extend the JSON Schema and add your own custom extra info
+class Config:
+    schema_extra = {
+        "example": {
+            "name": "Foo",
+            "description": "A very nice Item",
+            "price": 35.4,
+            "tax": 3.2,
+        }
+    }
+
+
 class Image(BaseModel):
-    url: str
+    url: HttpUrl
     name: str
 
 
 # declare the  data model as a class that inherits from BaseModel
 class Item(BaseModel):
-    name: str
+    name: str = Field(example="Foo")  # hose extra arguments passed won't add any validation, only extra information,
+    # for documentation purposes.
     description: str | None = Field(default=None,
+                                    example=" A very nice Item",
                                     title="The description of the item",
                                     max_length=300)
     price: float = Field(gt=0,
+                         example=35.4,
                          description="The price must be greater than zero")
-    tax: float | None = None
+    tax: float | None = Field(example=3.2)
     tags: list[str] = []
-    image: Image | None = None
+    image: list[Image] | None = None
 
 
 class User(BaseModel):
     username: str
     full_name: str | None = None
+
+
+class Offer(BaseModel):
+    name: str
+    description: str | None = None
+    price: float
+    items: list[Item]
 
 
 # command to launch: uvicorn main:app --reload.
@@ -42,11 +71,15 @@ class User(BaseModel):
 
 # PATH params
 @app.get("/items/{item_id}")
-async def read_item(item_id: int, q: str | None = None, short: bool = False):  # we can declare intem_id type.
+async def read_item(item_id: int,
+                    q: str | None = None,
+                    short: bool = False,
+                    ads_id: str | None = Cookie(default=None),
+                    user_agent: str | None = Header(default=None)):  # we can declare item_id type.
     # So, with that type declaration, FastAPI gives you automatic request "parsing" + "data validation".
     # All the data validation is performed under the hood by Pydantic.
 
-    item = {"item_id": item_id}
+    item = {"item_id": item_id, "ads_id": ads_id, "user_agent": user_agent}
     if q:
         item.update({"q": q})  # q is an optional query  param
     if not short:
@@ -93,7 +126,7 @@ async def read_user_item(user_id: int, item_id: str, q: str | None = None, short
 # Request Body
 # To declare a request body, you use Pydantic models with all their power and benefits.
 @app.post("/items/{item_id}")
-async def create_item(*,  # a little trick so we don't need to order the params
+async def create_item(*,  # a little trick, so we don't need to order the params
                       item_id: int = Path(title="the id of the item",
                                           gt=1,
                                           le=1000),  # metadata  & Number validator with path params
@@ -118,7 +151,33 @@ async def update_item(*,
                       item_id: int = Path(title="The ID of the item to get", ge=0, le=1000),
                       q: str | None = None,
                       item: Item | None = None,
-                      importance: int = Body(),  # want to have another key importance in the same body
+                      importance: int = Body(examples={
+                          "normal": {
+                              "summary": "A normal example",
+                              "description": "A **normal** item works correctly.",
+                              "value": {
+                                  "name": "Foo",
+                                  "description": "A very nice Item",
+                                  "price": 35.4,
+                                  "tax": 3.2,
+                              },
+                          },
+                          "converted": {
+                              "summary": "An example with converted data",
+                              "description": "FastAPI can convert price `strings` to actual `numbers` automatically",
+                              "value": {
+                                  "name": "Bar",
+                                  "price": "35.4",
+                              },
+                          },
+                          "invalid": {
+                              "summary": "Invalid data is rejected with an error",
+                              "value": {
+                                  "name": "Baz",
+                                  "price": "thirty five point four",
+                              },
+                          },
+                      }),  # want to have another key importance in the same body
                       user: User):
     # First,of course,you can mix Path, Query and request body parameter declarations freely
     # and FastAPI will know what to do.
@@ -132,3 +191,42 @@ async def update_item(*,
     if importance:
         results.update({"importance": importance})
     return results
+
+
+@app.post("/offers/")
+async def create_offer(offer: Offer):
+    return offer
+
+
+@app.post("/images/multiple/")
+async def create_multiple_images(images: list[Image]):  # body of lists
+    return images
+
+
+@app.post("/index-weights/")
+async def create_index_weights(weights: dict[int, float]):  # body of dict
+    # Have in mind that JSON only supports str as keys,
+    # But Pydantic has automatic data conversion & validation.
+    return weights
+
+
+@app.put("/items-v2/{item_id}")
+async def read_items(
+        item_id: UUID,
+        start_datetime: datetime | None = Body(default=None),
+        end_datetime: datetime | None = Body(default=None),
+        repeat_at: time | None = Body(default=None),
+        process_after: timedelta | None = Body(default=None),
+):
+    start_process = start_datetime + process_after
+    duration = end_datetime - start_process
+    return {
+        "item_id": item_id,
+        "start_datetime": start_datetime,
+        "end_datetime": end_datetime,
+        "repeat_at": repeat_at,
+        "process_after": process_after,
+        "start_process": start_process,
+        "duration": duration,
+    }
+
